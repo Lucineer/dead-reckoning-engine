@@ -86,8 +86,9 @@ async function listFolder(kv: KVNamespace, prefix: string): Promise<{ key: strin
   do {
     const list = await kv.list({ prefix, cursor, limit: 100 });
     for (const key of list.keys) {
-      const value = await kv.get(key) || '';
-      items.push({ key: key.slice(prefix.length), value });
+      const keyStr = (key as any).name || String(key);
+      const value = await kv.get(keyStr) || '';
+      items.push({ key: keyStr.slice(prefix.length), value });
     }
     cursor = list.list_complete ? undefined : list.cursor;
   } while (cursor);
@@ -398,6 +399,7 @@ export default {
 
     // Status — folder counts + items
     if (path === '/api/status') {
+      try {
       const [compass, dead, working, ground, published, open] = await Promise.all([
         listFolder(env.DR_KV, FOLDERS.compass),
         listFolder(env.DR_KV, FOLDERS.dead),
@@ -411,7 +413,7 @@ export default {
         try {
           const d = JSON.parse(i.value);
           return { id: i.key, model: d.model, iterations: d.inbetweenerCount || 0, status: d.status, storyboard: d.storyboard?.slice(0, 500) };
-        } catch { return { id: i.key, model: '?', iterations: 0, status: 'parse-error', storyboard: '' }; }
+        } catch { return { id: i.key, model: '?', iterations: 0, status: 'parse-error', storyboard: '' } };
       });
 
       const workingItems = working.map(i => {
@@ -430,6 +432,9 @@ export default {
         workingItems: workingItems.slice(0, 10),
         openItems: open.slice(0, 10),
       }), { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+      } catch (e: any) {
+        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      }
     }
 
     // Drop into compass
@@ -452,11 +457,15 @@ export default {
 
     // Trigger pipeline manually
     if (path === '/api/pipeline' && request.method === 'POST') {
-      const results: Record<string, string[]> = {};
-      results.compass = await processCompass(env);
-      results.iterate = await iterateDeadReckoning(env);
-      results.graduate = await graduateToWorking(env);
-      return new Response(JSON.stringify({ ok: true, results }), { headers: { 'Content-Type': 'application/json' } });
+      try {
+        const results: Record<string, string[]> = {};
+        results.compass = await processCompass(env);
+        results.iterate = await iterateDeadReckoning(env);
+        results.graduate = await graduateToWorking(env);
+        return new Response(JSON.stringify({ ok: true, results }), { headers: { 'Content-Type': 'application/json' } });
+      } catch (e: any) {
+        return new Response(JSON.stringify({ ok: false, error: e.message, stack: e.stack }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      }
     }
 
     // Promote working-theory to ground-truth
