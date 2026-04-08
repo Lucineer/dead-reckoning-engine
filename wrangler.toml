@@ -1,11 +1,4 @@
 name = "dead-reckoning-engine"
 main = "src/worker.ts"
-compatibility_date = "2024-12-01"
+compatibility_date = "2024-01-01"
 account_id = "049ff5e84ecf636b53b162cbb580aae6"
-
-[triggers]
-crons = ["*/5 * * * *"]
-
-[[kv_namespaces]]
-binding = "DR_KV"
-id = "89384197c1af4825bd20fae179f4b556"
